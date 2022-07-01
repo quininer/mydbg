@@ -1,0 +1,26 @@
+[package]
+name = "mydbg"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = [ "staticlib" ]
+
+[dependencies]
+# lldb
+libc = "0.2"
+cxx = "1"
+autocxx = "0.22"
+
+# commad
+argh = "0.1"
+anyhow = "1"
+bstr = "0.2"
+data-encoding = "2"
+memchr = "2"
+
+[build-dependencies]
+anyhow = "1"
+autocxx-build = "0.22"
