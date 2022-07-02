@@ -54,7 +54,7 @@ pub fn print_pretty_bytes(
         }
     }
 
-    let mut addr = base as *const u8;
+    let addr = base as *const u8;
 
     for (offset, chunk) in bytes.chunks(16).enumerate() {
         let addr = addr.wrapping_add(offset * 16);

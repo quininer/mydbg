@@ -27,15 +27,7 @@ pub struct Command {
 
     /// search register only
     #[argh(switch)]
-    register_only: bool,
-
-    /// search memory start address
-    #[argh(option)]
-    memory_start: Option<u64>,
-
-    /// search memory end address
-    #[argh(option)]
-    memory_end: Option<u64>
+    register_only: bool
 }
 
 impl Command {
@@ -52,8 +44,7 @@ impl Command {
             }
         }
 
-        Command::from_args(&["search"], &args)
-            .map_err(|err| err.output)
+        Command::from_args(&["search"], &args).map_err(|err| err.output)
     }
 
     pub fn execute(self, mut debugger: Pin<&mut lldb::SBDebugger>) -> anyhow::Result<()> {
@@ -86,7 +77,7 @@ impl Command {
         let thread_list = scan_threads_and_search_by_registers(&mut stdout, debugger.as_mut(), &value)?;
 
         if !self.register_only {
-            search_by_memory(&mut stdout, debugger, &value, &thread_list)?;
+            search_by_all_memory_region(&mut stdout, debugger, &value, &thread_list)?;
         }
 
         Ok(())
@@ -101,7 +92,7 @@ pub enum Value {
 pub struct Thread {
     name: Vec<u8>,
     index: usize,
-    range: Option<Range<u64>>
+    range: Range<u64>
 }
 
 pub fn scan_threads_and_search_by_registers(
@@ -137,8 +128,8 @@ pub fn scan_threads_and_search_by_registers(
             // https://github.com/llvm/llvm-project/blob/main/lldb/examples/darwin/heap_find/heap.py#L1172
             let current_sp = frame.GetSP();
             let sp_range = sp_range.get_or_insert_with(|| current_sp..current_sp);
-            sp_range.start = std::cmp::max(sp_range.start, current_sp);
-            sp_range.end = std::cmp::min(sp_range.end, current_sp);
+            sp_range.start = std::cmp::min(sp_range.start, current_sp);
+            sp_range.end = std::cmp::max(sp_range.end, current_sp);
 
             let regs_list_len = registers.GetSize();
             for regs_list_idx in 0..regs_list_len {
@@ -186,14 +177,11 @@ pub fn scan_threads_and_search_by_registers(
                     };
 
                     if hint {
-                        moveit!(let symbol = frame.GetSymbol());
-                        let frame_name = cstr!(unsafe symbol.GetName());
-
                         writeln!(
-                            stdout,
-                            "thread: {:?}; frame: {:?}; reg_name: {:?}",
-                            thread_name.as_deref().unwrap_or(b"<unknown>").as_bstr(),
-                            frame_name,
+                            stdout,"thread #{} {:?}, frame #{}, register {:?}",
+                            thread_idx,
+                            thread_name.as_ref().map(|b| b.as_bstr()),
+                            frame_idx,
                             reg_name,
                         )?;
 
@@ -203,7 +191,6 @@ pub fn scan_threads_and_search_by_registers(
                         }
 
                         print_pretty_bytes(stdout, 0, &buf)?;
-
                         writeln!(stdout)?;
                     }
                 }
@@ -213,18 +200,18 @@ pub fn scan_threads_and_search_by_registers(
         thread_list.push(Thread {
             name: thread_name.unwrap_or_default(),
             index: thread_idx,
-            range: sp_range
+            range: sp_range.context("no frame thread ?")?
         });
     }
 
     Ok(thread_list)
 }
 
-pub fn search_by_memory(
+pub fn search_by_all_memory_region(
     stdout: &mut dyn Write,
     debugger: Pin<&mut lldb::SBDebugger>,
     value: &Value,
-    thread_list: &[Thread]
+    thread_list: &[Thread],
 ) -> anyhow::Result<()> {
     moveit!{
         let mut target = debugger.GetSelectedTarget();
@@ -239,7 +226,6 @@ pub fn search_by_memory(
     let mem_len = mem_list.GetSize();
     for mem_idx in 0..mem_len {
         let ret = mem_list.as_mut().GetMemoryRegionAtIndex(mem_idx, mem.as_mut());
-
         if !ret {
             continue // warn ?
         }
@@ -256,7 +242,8 @@ pub fn search_by_memory(
             .with_context(|| format!("invalid region addr: {}..{}", start_addr, end_addr))?;
 
         if mem_size > 4 * 1024 * 1024 * 1024 {
-            continue // warn ?
+            writeln!(stdout, "memory region too large: {:?}", start_addr..end_addr)?;
+            continue
         }
 
         // # Safety
@@ -307,7 +294,7 @@ pub fn search_by_memory(
                 if mem.as_mut().IsReadable() { 'r' } else { '-' },
                 if mem.as_mut().IsWritable() { 'w' } else { '-' },
                 if mem.as_mut().IsExecutable() { 'x' } else { '-' },
-                cstr!(unsafe mem.as_mut().GetName())
+                cstr!(unsafe mem.as_mut().GetName()),
             )?;
         }
 
@@ -317,9 +304,16 @@ pub fn search_by_memory(
             let show_end = std::cmp::min(show_end, buf.len());
             let chunk = &buf[show_start..show_end];
 
-            let addr = start_addr + show_start as u64;
+            let addr = start_addr + offset as u64;
 
-            print_pretty_bytes(stdout, addr, chunk)?;
+            if let Some(thread) = thread_list.iter()
+                .find(|thread| thread.range.contains(&addr))
+            {
+                writeln!(stdout, "by thread #{} {:?}", thread.index, thread.name.as_bstr())?;
+            }
+
+            let show_addr_base = start_addr + show_start as u64;
+            print_pretty_bytes(stdout, show_addr_base, chunk)?;
             writeln!(stdout)?;
         }
     }
