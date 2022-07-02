@@ -7,6 +7,7 @@ use anyhow::Context;
 use autocxx::moveit::moveit;
 use bstr::ByteSlice;
 use crate::sys::lldb;
+use crate::util::print_pretty_bytes;
 
 
 /// MyDbg Search command
@@ -60,11 +61,16 @@ impl Command {
 
         let value = if self.is_hex || self.is_64bit_pointer {
             let value = self.value.as_str();
+            let is_num = value.starts_with("0x");
             let value = value.strip_prefix("0x").unwrap_or(value);
             match data_encoding::HEXLOWER_PERMISSIVE.decode(value.as_bytes()) {
                 Ok(value) if self.is_64bit_pointer => {
                     let value: [u8; 8] = value.try_into().ok().context("value length does not meet 64bit")?;
                     Value::U64(u64::from_be_bytes(value))
+                },
+                Ok(mut value) if is_num => {
+                    value.reverse();
+                    Value::Bytes(value)
                 },
                 Ok(value) => Value::Bytes(value),
                 Err(_) if self.is_64bit_pointer => {
@@ -185,12 +191,20 @@ pub fn scan_threads_and_search_by_registers(
 
                         writeln!(
                             stdout,
-                            "thread: {:?}; frame: {:?}; reg_name: {:?}: reg_value: {:?}",
+                            "thread: {:?}; frame: {:?}; reg_name: {:?}",
                             thread_name.as_deref().unwrap_or(b"<unknown>").as_bstr(),
                             frame_name,
                             reg_name,
-                            buf
                         )?;
+
+                        if let Value::U64(v) = value {
+                            buf.clear();
+                            buf.extend_from_slice(&v.to_le_bytes());
+                        }
+
+                        print_pretty_bytes(stdout, 0, &buf)?;
+
+                        writeln!(stdout)?;
                     }
                 }
             }
@@ -241,6 +255,10 @@ pub fn search_by_memory(
             .and_then(|size| size.try_into().ok())
             .with_context(|| format!("invalid region addr: {}..{}", start_addr, end_addr))?;
 
+        if mem_size > 4 * 1024 * 1024 * 1024 {
+            continue // warn ?
+        }
+
         // # Safety
         //
         // read raw data from memory
@@ -258,7 +276,7 @@ pub fn search_by_memory(
             buf.set_len(buf_len);
         }
 
-        let iter = match value {
+        let mut iter = match value {
             Value::U64(v) => {
                 // assume it's always aligned to a u64 pointer
                 let buf = unsafe {
@@ -279,13 +297,30 @@ pub fn search_by_memory(
             }
         };
 
-        for offset in iter {
-            let addr = start_addr + offset as u64;
-
+        let item = iter.next();
+        if item.is_some() {
             writeln!(
                 stdout,
-                "addr: {:p}", addr as *const ()
+                "[{:018p}-{:018p}] {}{}{} {:?}",
+                start_addr as *const u8,
+                end_addr as *const u8,
+                if mem.as_mut().IsReadable() { 'r' } else { '-' },
+                if mem.as_mut().IsWritable() { 'w' } else { '-' },
+                if mem.as_mut().IsExecutable() { 'x' } else { '-' },
+                cstr!(unsafe mem.as_mut().GetName())
             )?;
+        }
+
+        for offset in item.into_iter().chain(iter) {
+            let show_start = offset.checked_sub(16).unwrap_or(offset);
+            let show_end = offset.saturating_add(value.len()).saturating_add(16);
+            let show_end = std::cmp::min(show_end, buf.len());
+            let chunk = &buf[show_start..show_end];
+
+            let addr = start_addr + show_start as u64;
+
+            print_pretty_bytes(stdout, addr, chunk)?;
+            writeln!(stdout)?;
         }
     }
 
