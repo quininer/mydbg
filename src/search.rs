@@ -147,7 +147,7 @@ pub fn scan_threads_and_search_by_registers(
                             // read raw data from register
                             unsafe {
                                 buf.clear();
-                                buf.reserve_exact(reg_data_size);
+                                buf.try_reserve_exact(reg_data_size).context("oom")?;
 
                                 let reg_data_size = reg_data.as_mut().ReadRawData(
                                     error.as_mut(),
@@ -238,7 +238,7 @@ pub fn search_by_all_memory_region(
         // read raw data from memory
         unsafe {
             buf.clear();
-            buf.reserve_exact(mem_size);
+            buf.try_reserve_exact(mem_size).context("oom")?;
 
             let buf_len = process.as_mut().ReadMemory(
                 start_addr,

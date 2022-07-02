@@ -44,7 +44,7 @@ impl Command {
         //
         // read raw data from memory
         unsafe {
-            buf.reserve_exact(size);
+            buf.try_reserve_exact(size).context("oom")?;
 
             let len = process.as_mut().ReadMemory(
                 addr,

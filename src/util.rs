@@ -41,13 +41,16 @@ pub fn print_pretty_bytes(
 
     impl fmt::Display for AsciiPrinter<'_> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            use std::fmt::Write;
+
             for &b in self.0.iter() {
                 let c = b as char;
-                if !c.is_ascii_control() {
-                    write!(f, "{}", c)?;
+                let c = if c.is_ascii_graphic() {
+                    c
                 } else {
-                    write!(f, ".")?;
-                }
+                    '.'
+                };
+                f.write_char(c)?;
             }
 
             Ok(())
