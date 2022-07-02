@@ -70,3 +70,22 @@ pub fn print_pretty_bytes(
 
     Ok(())
 }
+
+
+pub unsafe fn command_from_ptr<T: argh::FromArgs>(name: &str, command: *const *const u8) -> Result<T, String> {
+    use std::ffi::CStr;
+
+    let mut args = Vec::new();
+
+    if !command.is_null() {
+        let mut arg: *const u8 = *command;
+        while !arg.is_null() {
+            let argx = CStr::from_ptr(arg.cast()).to_str()
+                .map_err(|err| format!("invalid argument: {:?}", err))?;
+            args.push(argx);
+            arg = *command.add(args.len());
+        }
+    }
+
+    argh::FromArgs::from_args(&[name], &args).map_err(|err| err.output)
+}

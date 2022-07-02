@@ -1,5 +1,4 @@
 use std::io::{ self, Write };
-use std::ffi::CStr;
 use std::pin::Pin;
 use std::ops::Range;
 use argh::FromArgs;
@@ -31,22 +30,6 @@ pub struct Command {
 }
 
 impl Command {
-    pub unsafe fn from_ptr(command: *const *const u8) -> Result<Command, String> {
-        let mut args = Vec::new();
-
-        if !command.is_null() {
-            let mut arg: *const u8 = *command;
-            while !arg.is_null() {
-                let argx = CStr::from_ptr(arg.cast()).to_str()
-                    .map_err(|err| format!("invalid argument: {:?}", err))?;
-                args.push(argx);
-                arg = *command.add(args.len());
-            }
-        }
-
-        Command::from_args(&["search"], &args).map_err(|err| err.output)
-    }
-
     pub fn execute(self, mut debugger: Pin<&mut lldb::SBDebugger>) -> anyhow::Result<()> {
         let mut stdout = io::stdout().lock();
 
@@ -130,6 +113,10 @@ pub fn scan_threads_and_search_by_registers(
             let sp_range = sp_range.get_or_insert_with(|| current_sp..current_sp);
             sp_range.start = std::cmp::min(sp_range.start, current_sp);
             sp_range.end = std::cmp::max(sp_range.end, current_sp);
+
+            if frame.IsInlined1() {
+                continue
+            }
 
             let regs_list_len = registers.GetSize();
             for regs_list_idx in 0..regs_list_len {
@@ -265,6 +252,8 @@ pub fn search_by_all_memory_region(
 
         let mut iter = match value {
             Value::U64(v) => {
+                // # Safety
+                //
                 // assume it's always aligned to a u64 pointer
                 let buf = unsafe {
                     let (prefix, buf, _) = buf.align_to::<u64>();
@@ -279,9 +268,7 @@ pub fn search_by_all_memory_region(
                     .map(|(i, _)| i * std::mem::size_of::<u64>());
                 either::Left(iter)
             },
-            Value::Bytes(v) => {
-                either::Right(memchr::memmem::find_iter(&buf, v))
-            }
+            Value::Bytes(v) => either::Right(memchr::memmem::find_iter(&buf, v))
         };
 
         let item = iter.next();
@@ -299,11 +286,6 @@ pub fn search_by_all_memory_region(
         }
 
         for offset in item.into_iter().chain(iter) {
-            let show_start = offset.checked_sub(16).unwrap_or(offset);
-            let show_end = offset.saturating_add(value.len()).saturating_add(16);
-            let show_end = std::cmp::min(show_end, buf.len());
-            let chunk = &buf[show_start..show_end];
-
             let addr = start_addr + offset as u64;
 
             if let Some(thread) = thread_list.iter()
@@ -312,8 +294,12 @@ pub fn search_by_all_memory_region(
                 writeln!(stdout, "by thread #{} {:?}", thread.index, thread.name.as_bstr())?;
             }
 
+            let show_start = offset.checked_sub(16).unwrap_or(offset);
+            let show_end = offset.saturating_add(value.len()).saturating_add(16);
+            let show_end = std::cmp::min(show_end, buf.len());
             let show_addr_base = start_addr + show_start as u64;
-            print_pretty_bytes(stdout, show_addr_base, chunk)?;
+
+            print_pretty_bytes(stdout, show_addr_base, &buf[show_start..show_end])?;
             writeln!(stdout)?;
         }
     }
