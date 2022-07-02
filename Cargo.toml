@@ -20,6 +20,7 @@ anyhow = "1"
 bstr = "0.2"
 data-encoding = "2"
 memchr = "2"
+either = "1"
 
 [build-dependencies]
 anyhow = "1"

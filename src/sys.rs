@@ -10,9 +10,8 @@ autocxx::include_cpp! {
     generate!("lldb::SBValue")
     generate!("lldb::SBData")
     generate!("lldb::SBError")
-    generate!("lldb::SBType")
-    generate!("lldb::SBTypeFormat")
-    generate!("lldb::Format")
+    generate!("lldb::SBMemoryRegionInfoList")
+    generate!("lldb::SBMemoryRegionInfo")
     safety!(unsafe_ffi)
 }
 

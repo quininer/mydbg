@@ -534,6 +534,7 @@ dependencies = [
  "bstr",
  "cxx",
  "data-encoding",
+ "either",
  "libc",
  "memchr",
 ]
