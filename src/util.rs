@@ -1,4 +1,6 @@
 use std::io::Write;
+use std::pin::Pin;
+use crate::sys::lldb;
 
 
 macro_rules! cstr {
@@ -91,4 +93,41 @@ pub unsafe fn command_from_ptr<T: argh::FromArgs>(name: &str, command: *const *c
     }
 
     argh::FromArgs::from_args(&[name], &args).map_err(|err| err.output)
+}
+
+pub fn read_memory<'a>(
+    process: Pin<&mut lldb::SBProcess>,
+    buf: &'a mut Vec<u8>,
+    addr: u64,
+    size: usize,
+    mut error: Pin<&mut lldb::SBError>
+) -> anyhow::Result<&'a [u8]> {
+    use anyhow::Context;
+
+    buf.clear();
+    buf.try_reserve_exact(size).context("oom")?;
+    error.as_mut().Clear();
+
+    // # Safety
+    //
+    // read raw data from memory
+    unsafe {
+        let len = process.ReadMemory(
+            addr,
+            buf.as_mut_ptr().cast(),
+            size,
+            error.as_mut()
+        );
+
+        buf.set_len(len);
+    }
+
+    if error.Success() {
+        assert!(!error.Fail());
+
+        Ok(buf.as_slice())
+    } else {
+        let err_msg = cstr!(unsafe error.GetCString());
+        anyhow::bail!("read memory failed: {:?}", err_msg)
+    }
 }

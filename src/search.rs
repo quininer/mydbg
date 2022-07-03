@@ -6,7 +6,7 @@ use anyhow::Context;
 use autocxx::moveit::moveit;
 use bstr::ByteSlice;
 use crate::sys::lldb;
-use crate::util::print_pretty_bytes;
+use crate::util::{ print_pretty_bytes, read_memory };
 
 
 /// MyDbg Search command
@@ -62,6 +62,8 @@ impl Command {
         if !self.register_only {
             search_by_all_memory_region(&mut stdout, debugger, &value, &thread_list)?;
         }
+
+        stdout.flush()?;
 
         Ok(())
     }
@@ -233,22 +235,16 @@ pub fn search_by_all_memory_region(
             continue
         }
 
-        // # Safety
-        //
-        // read raw data from memory
-        unsafe {
-            buf.clear();
-            buf.try_reserve_exact(mem_size).context("oom")?;
-
-            let buf_len = process.as_mut().ReadMemory(
-                start_addr,
-                buf.as_mut_ptr().cast(),
-                mem_size,
-                error.as_mut()
-            );
-
-            buf.set_len(buf_len);
-        }
+        let buf = match read_memory(
+            process.as_mut(),
+            &mut buf,
+            start_addr,
+            mem_size,
+            error.as_mut()
+        ) {
+            Ok(buf) => buf,
+            Err(_) => continue
+        };
 
         let mut iter = match value {
             Value::U64(v) => {
@@ -268,7 +264,7 @@ pub fn search_by_all_memory_region(
                     .map(|(i, _)| i * std::mem::size_of::<u64>());
                 either::Left(iter)
             },
-            Value::Bytes(v) => either::Right(memchr::memmem::find_iter(&buf, v))
+            Value::Bytes(v) => either::Right(memchr::memmem::find_iter(buf, v))
         };
 
         let item = iter.next();
