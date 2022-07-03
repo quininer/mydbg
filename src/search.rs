@@ -140,14 +140,16 @@ pub fn scan_threads_and_search_by_registers(
 
                     let hint = match value {
                         Value::U64(v) => {
+                            error.as_mut().Clear();
                             let reg_data = reg_data.as_mut().GetUnsignedInt64(error.as_mut(), 0);
-                            reg_data == *v
+                            error.Success() && reg_data == *v
                         },
                         Value::Bytes(v) => {
                             // # Safety
                             //
                             // read raw data from register
                             unsafe {
+                                error.as_mut().Clear();
                                 buf.clear();
                                 buf.try_reserve_exact(reg_data_size).context("oom")?;
 
@@ -161,7 +163,7 @@ pub fn scan_threads_and_search_by_registers(
                                 buf.set_len(reg_data_size);
                             }
 
-                            memchr::memmem::find(&buf, v).is_some()
+                            error.Success() && memchr::memmem::find(&buf, v).is_some()
                         }
                     };
 

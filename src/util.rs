@@ -123,7 +123,8 @@ pub fn read_memory<'a>(
     }
 
     if error.Success() {
-        assert!(!error.Fail());
+        anyhow::ensure!(!error.Fail(), "fail?");
+        anyhow::ensure!(buf.len() == size, "short read?");
 
         Ok(buf.as_slice())
     } else {
