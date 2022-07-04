@@ -5,7 +5,7 @@ use argh::FromArgs;
 use anyhow::Context;
 use autocxx::moveit::moveit;
 use crate::sys::lldb;
-use crate::util::{ print_pretty_bytes, read_memory };
+use crate::util::{ print_pretty_bytes, read_memory, u64ptr_from_str };
 
 
 /// MyDbg Read command
@@ -26,15 +26,7 @@ pub struct Command {
 
 impl Command {
     pub fn execute(self, debugger: Pin<&mut lldb::SBDebugger>) -> anyhow::Result<()> {
-        let addr = if let Some(value) = self.address.strip_prefix("0x") {
-            let value = data_encoding::HEXLOWER_PERMISSIVE
-                .decode(value.as_bytes())
-                .context("invalid hex value")?;
-            let value: [u8; 8] = value.try_into().ok().context("value length does not meet 64bit")?;
-            u64::from_be_bytes(value)
-        } else {
-            self.address.parse::<u64>().context("invalid u64 value")?
-        };
+        let addr = u64ptr_from_str(self.address.as_str())?;
         let size = self.size.unwrap_or(64);
 
         moveit!{

@@ -132,3 +132,36 @@ pub fn read_memory<'a>(
         anyhow::bail!("read memory failed: {:?}", err_msg)
     }
 }
+
+pub fn u64ptr_from_str(value: &str) -> anyhow::Result<u64> {
+    use anyhow::Context;
+
+    let value = if let Some(value) = value.strip_prefix("0x") {
+        let mut buf = [0; 8];
+        let n = data_encoding::HEXLOWER_PERMISSIVE.decode_len(value.len())?;
+        let n = buf.len().checked_sub(n).context("hex value is greater than 64bit")?;
+        data_encoding::HEXLOWER_PERMISSIVE
+            .decode_mut(value.as_bytes(), &mut buf[n..])
+            .map_err(|err| anyhow::format_err!("hex decode failed: {:?}", err))?;
+        u64::from_be_bytes(buf)
+    } else {
+        value.parse::<u64>().context("number parse failed")?
+    };
+    Ok(value)
+}
+
+#[test]
+fn test_u64ptr_from_str() {
+    assert_eq!(
+        0x01,
+        u64ptr_from_str("0x01").unwrap()
+    );
+    assert_eq!(
+        0x000056257f77c380,
+        u64ptr_from_str("0x000056257f77c380").unwrap()
+    );
+    assert_eq!(
+        0x0056257f77c38000,
+        u64ptr_from_str("0x0056257f77c38000").unwrap()
+    );
+}

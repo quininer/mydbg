@@ -6,7 +6,7 @@ use anyhow::Context;
 use autocxx::moveit::moveit;
 use bstr::ByteSlice;
 use crate::sys::lldb;
-use crate::util::{ print_pretty_bytes, read_memory };
+use crate::util::{ print_pretty_bytes, read_memory, u64ptr_from_str };
 
 
 /// MyDbg Search command
@@ -33,25 +33,19 @@ impl Command {
     pub fn execute(self, mut debugger: Pin<&mut lldb::SBDebugger>) -> anyhow::Result<()> {
         let mut stdout = io::stdout().lock();
 
-        let value = if self.is_hex || self.is_64bit_pointer {
+        let value = if self.is_64bit_pointer {
+            Value::U64(u64ptr_from_str(self.value.as_str())?)
+        } else if self.is_hex {
             let value = self.value.as_str();
-            let is_num = value.starts_with("0x");
-            let value = value.strip_prefix("0x").unwrap_or(value);
-            match data_encoding::HEXLOWER_PERMISSIVE.decode(value.as_bytes()) {
-                Ok(value) if self.is_64bit_pointer => {
-                    let value: [u8; 8] = value.try_into().ok().context("value length does not meet 64bit")?;
-                    Value::U64(u64::from_be_bytes(value))
-                },
-                Ok(mut value) if is_num => {
-                    value.reverse();
-                    Value::Bytes(value)
-                },
-                Ok(value) => Value::Bytes(value),
-                Err(_) if self.is_64bit_pointer => {
-                    let value = value.parse::<u64>().context("invalid u64 value")?;
-                    Value::U64(value)
-                },
-                Err(err) => anyhow::bail!("invalid hex value: {:?}", err)
+            if let Some(value) = value.strip_prefix("0x") {
+                let mut buf = data_encoding::HEXLOWER_PERMISSIVE.decode(value.as_bytes())
+                    .context("hex decode failed")?;
+                buf.reverse();
+                Value::Bytes(buf)
+            } else {
+                let buf = data_encoding::HEXLOWER_PERMISSIVE.decode(value.as_bytes())
+                    .context("hex decode failed")?;
+                Value::Bytes(buf)
             }
         } else {
             Value::Bytes(self.value.into())
