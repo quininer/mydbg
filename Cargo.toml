@@ -12,16 +12,17 @@ crate-type = [ "staticlib" ]
 # lldb
 libc = "0.2"
 cxx = "1"
-autocxx = "0.22"
+autocxx = "0.24"
 
 # commad
 argh = "0.1"
 anyhow = "1"
-bstr = "0.2"
+bstr = "1"
 data-encoding = "2"
 memchr = "2"
 either = "1"
+human-size = "0.4"
 
 [build-dependencies]
 anyhow = "1"
-autocxx-build = "0.22"
+autocxx-build = "0.24"
