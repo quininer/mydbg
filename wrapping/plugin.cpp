@@ -11,6 +11,7 @@ extern "C" {
 	bool mydbg_search_do_execute(void* debugger, char **command, void* result);
 	bool mydbg_read_do_execute(void* debugger, char **command, void* result);
 	bool mydbg_thread_do_execute(void* debugger, char **command, void* result);
+	bool mydbg_debug_do_execute(void* debugger, char **command, void* result);
 }
 
 class SearchCommand : public lldb::SBCommandPluginInterface {
@@ -37,11 +38,20 @@ public:
   }
 };
 
+class DebugCommand : public lldb::SBCommandPluginInterface {
+public:
+  virtual bool DoExecute(lldb::SBDebugger debugger, char **command,
+                         lldb::SBCommandReturnObject &result) {
+	return mydbg_debug_do_execute(&debugger, command, &result);
+  }
+};
+
 bool lldb::PluginInitialize(lldb::SBDebugger debugger) {
   lldb::SBCommandInterpreter interpreter = debugger.GetCommandInterpreter();
   lldb::SBCommand foo = interpreter.AddMultiwordCommand("mydbg", NULL);
   foo.AddCommand("search", new SearchCommand(), "search value from stack/heap/registers");
   foo.AddCommand("read", new ReadCommand(), "read value from memory");
   foo.AddCommand("thread", new ThreadCommand(), "print thread info");
+  foo.AddCommand("debug", new DebugCommand(), "print rust debug object");
   return true;
 }

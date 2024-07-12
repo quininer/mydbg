@@ -8,6 +8,9 @@ edition = "2021"
 [lib]
 crate-type = [ "staticlib" ]
 
+[workspace]
+members = [ "debug" ]
+
 [dependencies]
 # lldb
 libc = "0.2"
