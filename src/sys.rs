@@ -1,3 +1,5 @@
+#![allow(unused_imports, improper_ctypes, unnecessary_transmutes)]
+
 autocxx::include_cpp! {
     #include "lldb/API/LLDB.h"
     generate!("lldb::SBDebugger")
