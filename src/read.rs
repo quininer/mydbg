@@ -5,7 +5,7 @@ use argh::FromArgs;
 use anyhow::Context;
 use autocxx::moveit::moveit;
 use crate::sys::lldb;
-use crate::util::{ print_pretty_bytes, read_memory, u64ptr_from_str };
+use crate::util::{ print_pretty_bytes, read_memory, u64ptr };
 
 
 /// MyDbg Read command
@@ -26,7 +26,7 @@ pub struct Command {
 
 impl Command {
     pub fn execute(self, debugger: Pin<&mut lldb::SBDebugger>) -> anyhow::Result<()> {
-        let addr = u64ptr_from_str(self.address.as_str())?;
+        let addr = u64ptr(self.address.as_str())?;
         let size = self.size.unwrap_or(64);
 
         moveit!{

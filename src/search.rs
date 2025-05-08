@@ -6,7 +6,7 @@ use anyhow::Context;
 use autocxx::moveit::moveit;
 use bstr::ByteSlice;
 use crate::sys::lldb;
-use crate::util::{ print_pretty_bytes, read_memory, u64ptr_from_str };
+use crate::util::{ print_pretty_bytes, read_memory, u64ptr };
 
 
 /// MyDbg Search command
@@ -34,7 +34,7 @@ impl Command {
         let mut stdout = io::stdout().lock();
 
         let value = if self.is_64bit_pointer {
-            Value::U64(u64ptr_from_str(self.value.as_str())?)
+            Value::U64(u64ptr(self.value.as_str())?)
         } else if self.is_hex {
             let value = self.value.as_str();
             if let Some(value) = value.strip_prefix("0x") {

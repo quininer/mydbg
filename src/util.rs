@@ -133,7 +133,7 @@ pub fn read_memory<'a>(
     }
 }
 
-pub fn u64ptr_from_str(value: &str) -> anyhow::Result<u64> {
+pub fn u64ptr(value: &str) -> anyhow::Result<u64> {
     use anyhow::Context;
 
     let value = if let Some(value) = value.strip_prefix("0x") {

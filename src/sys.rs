@@ -14,6 +14,10 @@ autocxx::include_cpp! {
     generate!("lldb::SBError")
     generate!("lldb::SBMemoryRegionInfoList")
     generate!("lldb::SBMemoryRegionInfo")
+    generate!("lldb::SBBreakpoint")
+    generate!("lldb::SBBroadcaster")
+    generate!("lldb::SBListener")
+    generate!("lldb::SBEvent")
     safety!(unsafe_ffi)
 }
 
